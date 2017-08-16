@@ -12,7 +12,7 @@ void SysTick_Handler(void) {
   		break;
   }
 }
-
+// add I2C stuff here
 int main(void)
 {
 
