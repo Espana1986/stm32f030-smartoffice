@@ -4,6 +4,7 @@
 #include <stm32f0xx_rcc.h>
 #include <stm32f0xx_i2c.h>
 #include <stm32f0xx_spi.h>
+#include <sx1276Regs-LoRa.h>
 
 //SHT31-D  declarations
 #define SHD_SDA GPIO_Pin_11
@@ -14,9 +15,6 @@
 #define SHD_SCL_PS GPIO_PinSource10
 #define SHD_PIN_AF GPIO_AF_1
 #define SHD_I2C I2C2
-
-
-
 
 //SHD-31-D I2C address - If Error Shift Address left by one due to libary fault
 #define SHDAddr (0x44<<1)
@@ -32,6 +30,8 @@
 volatile uint32_t MSec;
 
 int SHD_Data[10];
+uint8_t txbuf[4], rxbuf[4];
+
 
 GPIO_InitTypeDef GP;
 I2C_InitTypeDef IT;
@@ -163,20 +163,53 @@ uint8_t I2C_RdReg(int8_t Reg, int8_t *Data, uint8_t DCnt)
 
 void SPI_SendData(uint8_t adress, uint8_t data){
 	 
-	GPIO_ResetBits(GPIOB, GPIO_Pin_12);
+//	GPIO_ResetBits(GPIOB, GPIO_Pin_12);
 	 
 	while(!SPI_I2S_GetFlagStatus(SPI1, SPI_I2S_FLAG_TXE)); 
 	SPI_SendData8(SPI1, adress);
 //	while(!SPI_I2S_GetFlagStatus(SPI1, SPI_I2S_FLAG_RXNE));
-//	SPI_ReceiveData8(SPI1);
-//	while(!SPI_I2S_GetFlagStatus(SPI1, SPI_I2S_FLAG_TXE)); 
-//	SPI_SendData8(SPI1, data);
-//	while(!SPI_I2S_GetFlagStatus(SPI1, SPI_I2S_FLAG_RXNE));
-//	SPI_ReceiveData8(SPI1);
+	SPI_ReceiveData8(SPI1);
+	while(!SPI_I2S_GetFlagStatus(SPI1, SPI_I2S_FLAG_TXE)); 
+	SPI_SendData8(SPI1, data);
+	while(!SPI_I2S_GetFlagStatus(SPI1, SPI_I2S_FLAG_RXNE));
+	SPI_ReceiveData8(SPI1);
 	 
-	GPIO_SetBits(GPIOB, GPIO_Pin_12);
+//	GPIO_SetBits(GPIOB, GPIO_Pin_12);
 }
- 
+/*
+void SPI_RXData(uint8_t adress, uint8_t data){
+
+	GPIO_ResetBits(GPIOB, GPIO_Pin_12);
+
+	while(!SPI_I2S_GetFlagStatus(SPI1, SPI_I2S_FLAG_TXE)); 
+	SPI_SendData8(SPI1, adress);
+	while(!SPI_I2S_GetFlagStatus(SPI1, SPI_I2S_FLAG_RXNE));
+	SPI_ReceiveData8(SPI1);
+	//	while(!SPI_I2S_GetFlagStatus(SPI1, SPI_I2S_FLAG_TXE)); 
+	SPI_SendData8(SPI1, data);
+	//	while(!SPI_I2S_GetFlagStatus(SPI1, SPI_I2S_FLAG_RXNE));
+	//	SPI_ReceiveData8(SPI1);
+}
+*/
+
+SPI_GetData(uint8_t adress){
+
+	GPIO_ResetBits(GPIOB, GPIO_Pin_12); 
+	
+	while(!SPI_I2S_GetFlagStatus(SPI1, SPI_I2S_FLAG_TXE)); 
+	SPI_SendData8(SPI1, adress);
+	while(!SPI_I2S_GetFlagStatus(SPI1, SPI_I2S_FLAG_RXNE));
+	SPI_ReceiveData8(SPI1); //Clear RXNE bit
+
+	while(!SPI_I2S_GetFlagStatus(SPI1, SPI_I2S_FLAG_TXE)); 
+	SPI_SendData8(SPI1, 0x00); //Dummy byte to generate clock
+	while(!SPI_I2S_GetFlagStatus(SPI1, SPI_I2S_FLAG_RXNE));
+
+	GPIO_SetBits(GPIOB, GPIO_Pin_12);
+
+	return  SPI_ReceiveData8(SPI1);
+}
+
 //Convert an array to an unsigned byte/word/dword
 //Type = 0 for u8
 //Type = 1 for u16
@@ -196,7 +229,7 @@ uint32_t AToU(uint8_t *D, uint8_t Type){
 void SysTick_Handler(void)
 {	
 	MSec++;
-		
+
 	static uint16_t tick = 0;
 
 	switch (tick++)
@@ -204,9 +237,9 @@ void SysTick_Handler(void)
   	case 500:
   		tick = 0;
   		GPIOA->ODR ^= (1 << 10);
-//		I2C_WrReg(0xF3,0x2D);
+		I2C_WrReg(0xF3,0x2D);
 //		Delay(1);
-		 uint8_t DCnt = 4;	
+//		 uint8_t DCnt = 4;	
 //		I2C_RdReg(int8_t Reg, int8_t *Data, uint8_t DCnt) DCnt in bytes
 //		I2C_SHDRd(SHD_Data,DCnt);
 	
@@ -217,10 +250,7 @@ void SysTick_Handler(void)
 
 void SPI1_Init(void)
 {
-	 
-	 
 	//	RCC_APB2PeriphClockCmd(RCC_APB2Periph_SPI1, ENABLE);
-	 
 	SPI_InitTypeDef SPI_InitTypeDefStruct;
  	 
 	SPI_InitTypeDefStruct.SPI_Direction = SPI_Direction_2Lines_FullDuplex;
@@ -261,7 +291,8 @@ void SPI1_Init(void)
 	 
 	 
 	SPI_Cmd(SPI1, ENABLE);
-	 
+
+
 }
 
 //Start I2C2 Bus All Clocks Must Be Started Before Calling
@@ -295,18 +326,77 @@ void I2C2_Init()
 	IT.I2C_AcknowledgedAddress = I2C_AcknowledgedAddress_7bit;
 	I2C_Init(SHD_I2C, &IT);
 	I2C_Cmd(I2C2, ENABLE);
+	
 
 }
-
 //Delay function: All it does is operate a nop instruction
 //until "Time" amount of milliseconds has passed.
 void Delay(uint32_t Time)
 {
 	volatile uint32_t MSStart = MSec;
 	while((MSec-MSStart)<Time) asm volatile("nop");
-
 }
 
+/*
+*****************************************************************************************
+* Description  :   Initialisation of the RFM module. 
+*                  Check the datasheet if you want to use other settings
+*****************************************************************************************
+*/
+void RFM_Init()
+{
+	GPIO_ResetBits(GPIOB, GPIO_Pin_12);
+
+//	Clear Registers:
+//	SPI_GetData(0x00);
+	//Setting RFM in sleep
+	SPI_SendData(0x01,0x00);
+
+	//Switch to LoRa mode
+	SPI_SendData(0x01,0x80);
+
+	//Setting RFM to standby
+	SPI_SendData(0x01,0x81);
+	//Wait for mode ready
+//	while(HAL_GPIO_ReadPin(GPIOC, DIO5) == 0){} 
+
+	//Set carrier frequency
+	//433.175 MHz / 61.035 Hz = 7097157 = 0x6C4B45
+	SPI_SendData(0x06,0x6C);
+	SPI_SendData(0x07,0x4B);
+	SPI_SendData(0x08,0x45);
+
+	//Set Pa pin to maximal power
+	SPI_SendData(0x09,0xFF);
+
+	//Bandwith 250 kHz, Coding rate = 4/8, Implicit header mode
+	SPI_SendData(0x1D,0x8B);
+
+	//Spreading factor 6, PayloadCRC on
+	SPI_SendData(0x1E,0x64);
+	//Setting additional register for SF6 use other settings for the other SF
+	SPI_SendData(0x31,0xC5);
+	SPI_SendData(0x37,0x0C);
+
+	//Preamble length 0x0018 + 4 = 28
+	SPI_SendData(0x20,0x00);
+	SPI_SendData(0x21,0x18);
+
+	//set 16
+	uint8_t	package_length = 0x10;
+	//Payload length
+//	SPI_SendData(0x22,package_length);
+
+        //Set RFM in continues receive
+//	SPI_SendData(0x01,0x85);
+			
+	GPIO_SetBits(GPIOB, GPIO_Pin_12);
+
+
+
+	//Wait for mode ready
+//	while(HAL_GPIO_ReadPin(GPIOC, DIO5) == 0){} 
+}
 
 int main(void)
 {
@@ -332,7 +422,6 @@ int main(void)
 	RCC->AHBENR |= RCC_AHBENR_GPIOAEN; 
 
 	//SPI 
-
 	RCC_APB2PeriphClockCmd(RCC_APB2Periph_SPI1, ENABLE);
 
 	//Set mode Register for GPIOA
@@ -340,6 +429,8 @@ int main(void)
 
 	I2C2_Init();
  	SPI1_Init();
+	RFM_Init();
+
 	//GPIOB_AFRL Set B Pin 0-7
 //	GPIOB->AFR[0] = (0x0);
 	//GPIOB_AFRH Set B Pin 8-15
@@ -359,8 +450,8 @@ int main(void)
 	
 	while(1)
 	{
-
-	SPI_SendData(0x04,0x00);
-	Delay(500);	
+	//	SPI_SendData(0x04,0x00);
+		SPI_GetData(0x42);
+		Delay(500);	
 	}	
 }
