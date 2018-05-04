@@ -25,7 +25,7 @@ OBJCOPY=arm-none-eabi-objcopy
 OBJDUMP=arm-none-eabi-objdump
 SIZE=arm-none-eabi-size
 
-CFLAGS  = -Wall -g -std=c99 -Os  
+CFLAGS  = -Wall -g #-std=c99 -Os //Romeo removed to allow ASM in line 
 #CFLAGS += -mlittle-endian -mthumb -mcpu=cortex-m0 -march=armv6s-m
 CFLAGS += -mlittle-endian -mcpu=cortex-m0  -march=armv6-m -mthumb
 CFLAGS += -ffunction-sections -fdata-sections
@@ -39,9 +39,8 @@ vpath %.a $(STD_PERIPH_LIB)
 ROOT=$(shell pwd)
 
 CFLAGS += -I inc -I $(STD_PERIPH_LIB) -I $(STD_PERIPH_LIB)/CMSIS/Device/ST/STM32F0xx/Include
-CFLAGS += -I $(STD_PERIPH_LIB)/CMSIS/Include -I $(STD_PERIPH_LIB)/STM32F0xx_StdPeriph_Driver/inc
+CFLAGS += -I $(STD_PERIPH_LIB)/CMSIS/Include -I $(STD_PERIPH_LIB)/STM32F0xx_StdPeriph_Driver/inc -I $(STD_PERIPH_LIB)/STM32F0xx_StdPeriph_Driver/radio
 CFLAGS += -include $(STD_PERIPH_LIB)/stm32f0xx_conf.h
-
 SRCS += Device/startup_stm32f0xx.s # add startup file to build
 
 # need if you want to build with -DUSE_CMSIS 
